@@ -1,10 +1,13 @@
 import 'reflect-metadata';
+import { injectable, inject } from 'inversify';
 import { ServiceIdentifier } from '../types';
 import { METADATA_KEYS } from '../types/constants';
 import { DependencyRegistry } from '../core/registry';
+import { Logger } from '../utils/logger';
 
 /**
  * Service decorator - marks a class as a service with a specific identifier
+ * @deprecated Use @Injectable() instead
  */
 export function Service(identifier: ServiceIdentifier): ClassDecorator {
   return function (target: any) {
@@ -14,13 +17,17 @@ export function Service(identifier: ServiceIdentifier): ClassDecorator {
 }
 
 /**
- * Inject decorator - marks a parameter for dependency injection (unified for services and stores)
+ * Inject decorator - marks a parameter for dependency injection
+ * Defers Inversify's @inject to avoid circular dependency at decoration time
  */
 export function Inject(identifier: ServiceIdentifier): ParameterDecorator {
   return function (target: any, propertyKey: string | symbol | undefined, parameterIndex: number) {
-    const existingTokens = Reflect.getMetadata(METADATA_KEYS.INJECT, target) || [];
-    existingTokens[parameterIndex] = identifier;
-    Reflect.defineMetadata(METADATA_KEYS.INJECT, existingTokens, target);
+    // Store the identifier in our own metadata first
+    // We'll apply Inversify's @inject later in @Injectable
+    console.log("gyf Inject", identifier)
+    const lazyInjects = Reflect.getMetadata(METADATA_KEYS.INJECT, target) || [];
+    lazyInjects[parameterIndex] = identifier;
+    Reflect.defineMetadata(METADATA_KEYS.INJECT, lazyInjects, target);
   };
 }
 
@@ -34,12 +41,14 @@ export function InjectStore(identifier: ServiceIdentifier): ParameterDecorator {
 
 /**
  * InjectLogger decorator - marks a parameter for logger injection
+ * This is a custom feature that injects the Logger service
  */
 export function InjectLogger(): ParameterDecorator {
   return function (target: any, propertyKey: string | symbol | undefined, parameterIndex: number) {
-    const existingTokens = Reflect.getMetadata(METADATA_KEYS.INJECT_LOGGER, target) || [];
-    existingTokens[parameterIndex] = true;
-    Reflect.defineMetadata(METADATA_KEYS.INJECT_LOGGER, existingTokens, target);
+    // Store Logger identifier in our own metadata (consistent with @Inject)
+    const lazyInjects = Reflect.getMetadata(METADATA_KEYS.INJECT, target) || [];
+    lazyInjects[parameterIndex] = Logger;
+    Reflect.defineMetadata(METADATA_KEYS.INJECT, lazyInjects, target);
   };
 }
 
@@ -51,27 +60,28 @@ export function getServiceIdentifier(target: any): ServiceIdentifier | undefined
 }
 
 /**
- * Get inject tokens from a class
+ * Get inject tokens from a class (legacy support)
  */
 export function getInjectTokens(target: any): ServiceIdentifier[] {
   return Reflect.getMetadata(METADATA_KEYS.INJECT, target) || [];
 }
 
 /**
- * Get inject store tokens from a class
+ * Get inject store tokens from a class (legacy support)
  */
 export function getInjectStoreTokens(target: any): ServiceIdentifier[] {
   return Reflect.getMetadata(METADATA_KEYS.INJECT_STORE, target) || [];
 }
 
 /**
- * Get inject logger tokens from a class
+ * Get inject logger tokens from a class (legacy support)
  */
 export function getInjectLoggerTokens(target: any): boolean[] {
   return Reflect.getMetadata(METADATA_KEYS.INJECT_LOGGER, target) || [];
 }
 
 /**
- * Injectable decorator - auto-registers services without manual identifier
+ * Injectable decorator - auto-registers services and applies Inversify's @injectable
+ * This is a wrapper that combines auto-registration with Inversify's native decorator
  */
 export const Injectable = DependencyRegistry.getInstance().createInjectableDecorator();

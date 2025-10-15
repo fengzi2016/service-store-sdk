@@ -2,8 +2,8 @@
  * Core types and interfaces for the Service-Store SDK
  */
 
-// Service identifier type
-export type ServiceIdentifier = string | symbol | (new (...args: any[]) => any);
+// Service identifier type - can be class constructor, string, or symbol
+export type ServiceIdentifier<T = any> = (new (...args: any[]) => T) | string | symbol;
 
 // Service interface
 export interface IService {
@@ -29,29 +29,27 @@ export interface IStoreFacade<T = any> {
 
 // Service container interface
 export interface IServiceContainer {
-  bind<T>(identifier: ServiceIdentifier): any;
-  get<T>(identifier: ServiceIdentifier): T;
-  isBound(identifier: ServiceIdentifier): boolean;
-  unbind(identifier: ServiceIdentifier): void;
+  bind<T>(identifier: ServiceIdentifier<T>): any;
+  get<T>(identifier: ServiceIdentifier<T>): T;
+  isBound<T>(identifier: ServiceIdentifier<T>): boolean;
+  unbind<T>(identifier: ServiceIdentifier<T>): void;
   dispose(): void;
 }
 
 // Service registration
-export interface ServiceRegistration {
-  identifier: ServiceIdentifier;
-  implementation: new (...args: any[]) => any;
+export interface ServiceRegistration<T = any> {
+  identifier: ServiceIdentifier<T>;
+  implementation: new (...args: any[]) => T;
 }
 
 // Store registration
-export interface StoreRegistration {
-  identifier: ServiceIdentifier;
+export interface StoreRegistration<T = any> {
+  identifier: ServiceIdentifier<T>;
   facade: IStoreFacade;
 }
 
 // Provider props
 export interface ServiceProviderProps {
-  services: ServiceRegistration[];
-  stores: StoreRegistration[];
   children: React.ReactNode;
 }
 

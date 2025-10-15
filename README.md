@@ -1,284 +1,109 @@
 # @bookworm/service-store-sdk
 
-A unified Service->Store SDK that combines the best of both bookworm and iCube architectures, built on top of the mature [Inversify](https://inversify.io/) dependency injection library.
+一个用于前端 Service + Store 架构的 SDK。基于 Inversify（DI）与 Zustand（Store），支持：
+- 自动注册（@Injectable 收集 → 容器 autoRegister 绑定）
+- 标识符：支持 symbol 与类构造器（类会映射到配置的 symbol）
+- 循环依赖容忍：懒代理首次访问时再解析为真实实例
+- Store 能力：持久化（localStorage/自定义 storage）与计算属性（getComputed）
+- React 集成：<ServiceProvider/>、useService、用 Service 拿到 Store 再渲染
 
-## 🚀 Features
-
-- **🔧 Mature DI**: Built on Inversify, the most popular TypeScript DI library
-- **🔄 Lifecycle Management**: Automatic service disposal and cleanup
-- **📦 Store Abstraction**: Clean facade pattern for Zustand stores
-- **⚡ Type Safety**: Full TypeScript support with decorators
-- **🎯 React Integration**: Seamless React hooks and providers
-- **🛠️ Logger Support**: Built-in logging with context
-- **🧪 Test Friendly**: Easy mocking and testing support
-
-## 📦 Installation
-
+## 安装
 ```bash
-npm install @bookworm/service-store-sdk
-# or
-yarn add @bookworm/service-store-sdk
-# or
-pnpm add @bookworm/service-store-sdk
+npm install @bookworm/service-store-sdk inversify reflect-metadata zustand
+```
+入口引入一次：
+```ts
+import 'reflect-metadata';
 ```
 
-## 🎯 Quick Start
+## 快速开始
+### 定义 token
+```ts
+export const USER_SERVICE = Symbol.for('UserService');
+export const USER_STORE = Symbol.for('UserStore');
+```
 
-### 1. Basic Setup
+### 定义 Store（持久化 + 计算属性）
+```ts
+import { Injectable, DIStore } from '@bookworm/service-store-sdk';
+import { USER_STORE } from './tokens';
 
+type State = { user: { id: string; name: string; role?: string } | null; loading: boolean };
+@Injectable({ identifier: USER_STORE })
+export class UserStore extends DIStore<State, {}> {
+  constructor() {
+    super(
+      { user: null, loading: false },
+      { persist: { key: 'UserStore', partialize: s => ({ user: s.user }) } }
+    );
+  }
+  protected createActions(set, get) { return {}; }
+  isLoggedIn() { return this.getComputed(s => !!s.user); }
+  isAdmin() { return this.getComputed(s => s.user?.role === 'admin'); }
+}
+```
+
+### 定义 Service（仅改动 Store）
+```ts
+import { Injectable, Inject, InjectLogger, BaseService } from '@bookworm/service-store-sdk';
+import { USER_SERVICE, USER_STORE } from './tokens';
+import { UserStore } from './stores/UserStore';
+
+@Injectable({ identifier: USER_SERVICE })
+export class UserService extends BaseService {
+  constructor(@Inject(USER_STORE) private userStore: UserStore, @InjectLogger() logger?: any) { super(logger); }
+  async login() { this.userStore.setState({ user: { id: '1', name: 'Admin', role: 'admin' }, loading: false }); }
+}
+```
+
+### React 使用
 ```tsx
-import React from 'react';
-import { create } from 'zustand';
-import {
-  ServiceProvider,
-  useService,
-  Service,
-  InjectStore,
-  InjectLogger,
-  BaseService,
-  createStoreFacade,
-} from '@bookworm/service-store-sdk';
+import { ServiceProvider, useService } from '@bookworm/service-store-sdk';
+import { UserService } from './services/UserService';
+import { UserStore } from './stores/UserStore';
 
-// Define your store
-const useUserStore = create((set) => ({
-  isLogin: false,
-  userProfile: null,
-  login: (profile) => set({ isLogin: true, userProfile: profile }),
-  logout: () => set({ isLogin: false, userProfile: null }),
-}));
-
-// Define service interface
-interface IUserService {
-  isLoggedIn(): boolean;
-  login(profile: any): void;
-  logout(): void;
-}
-
-// Implement service - 使用字符串标识符，更简洁！
-@Service('UserService')
-class UserService extends BaseService implements IUserService {
-  readonly serviceName = 'UserService';
-
-  constructor(
-    @InjectStore('UserStore') private userStore: any,
-    @InjectLogger() private logger?: any
-  ) {
-    super(logger);
-  }
-
-  isLoggedIn(): boolean {
-    return this.userStore.getState().isLogin;
-  }
-
-  login(profile: any): void {
-    this.userStore.getState().login(profile);
-    this._info('User logged in', { profile });
-  }
-
-  logout(): void {
-    this.userStore.getState().logout();
-    this._info('User logged out');
-  }
-}
-
-// Use in your app
-function App() {
-  return (
-    <ServiceProvider
-      services={[
-        { identifier: 'UserService', implementation: UserService },
-      ]}
-      stores={[
-        { identifier: 'UserStore', facade: createStoreFacade(useUserStore) },
-      ]}
-    >
-      <UserComponent />
-    </ServiceProvider>
-  );
-}
-
-function UserComponent() {
-  // 直接使用字符串标识符，更简洁！
-  const userService = useService<IUserService>('UserService');
-
+function Demo() {
+  const userService = useService(UserService);
+  const userStore = useService(UserStore);
+  const userName = userStore.useStore(s => s.user?.name || 'Guest');
+  const isAdmin = userStore.isAdmin();
   return (
     <div>
-      {userService.isLoggedIn() ? (
-        <button onClick={() => userService.logout()}>Logout</button>
-      ) : (
-        <button onClick={() => userService.login({ name: 'John' })}>Login</button>
-      )}
+      <p>User: {userName} / Admin: {isAdmin ? 'Yes' : 'No'}</p>
+      <button onClick={() => userService.login()}>Login</button>
     </div>
   );
 }
-```
 
-### 2. Advanced Usage with Cross-Dependencies
-
-```tsx
-// Multiple services with dependencies
-@Service(TYPES.ChatActionsService)
-class ChatActionsService extends BaseService {
-  constructor(
-    @Inject(TYPES.UserService) private userService: IUserService,
-    @Inject(TYPES.ChatService) private chatService: IChatService,
-    @InjectLogger() private logger?: any
-  ) {
-    super(logger);
-  }
-
-  canSendMessage(): boolean {
-    return this.userService.isLoggedIn();
-  }
-
-  sendMessage(content: string): void {
-    if (!this.canSendMessage()) {
-      this._warn('Cannot send message: user not logged in');
-      return;
-    }
-
-    this.chatService.addMessage({ content, timestamp: new Date() });
-    this._info('Message sent', { content });
-  }
+export default function App() {
+  return (
+    <ServiceProvider>
+      <Demo />
+    </ServiceProvider>
+  );
 }
 ```
 
-## 🏗️ Architecture
+## 设计要点
+- 标识符
+  - 推荐 symbol：`@Injectable({ identifier: TOKEN })` 与 `@Inject(TOKEN)`
+  - 也可传类：`useService(MyClass)`；框架用类上的元数据映射到 token（若有配置）
+- 自动注册
+  - `@Injectable()` 收集实现；`ServiceProvider` 初始化时 `autoRegister()` 绑定
+- 循环依赖
+  - 冲突时返回“懒代理”，首次访问属性/方法时解析并升级为真实实例
+- Store 渲染
+  - 组件只从 Store 读取；Service 只修改 Store
 
-### Core Components
+## DIStore API
+- 构造：`new DIStore(initialState, { persist?: { key, partialize?, storage? } })`
+- `useStore(selector)`：组件选择状态片段
+- `getState()/setState()`：读写状态
+- `getComputed(selector)`：派生值
+- 持久化：初始化恢复；更新后写入 storage（默认 localStorage）
 
-1. **Service Container**: Based on Inversify for robust DI
-2. **Store Facade**: Clean abstraction over Zustand stores
-3. **Lifecycle Management**: Automatic disposal and cleanup
-4. **React Integration**: Hooks and providers for React apps
-
-### Key Benefits
-
-- **🔧 Mature Foundation**: Built on Inversify, battle-tested in production
-- **🔄 Automatic Cleanup**: Services are automatically disposed
-- **📦 Store Abstraction**: Clean separation between business logic and state
-- **⚡ Type Safety**: Full TypeScript support with compile-time checks
-- **🎯 React Optimized**: Designed specifically for React applications
-
-## 📚 API Reference
-
-### Decorators
-
-```typescript
-// Service decorator
-@Service(TYPES.UserService)
-class UserService extends BaseService { }
-
-// Dependency injection
-@Inject(TYPES.UserService)
-private userService: IUserService;
-
-// Store injection
-@InjectStore(TYPES.UserStore)
-private userStore: IStoreFacade;
-
-// Logger injection
-@InjectLogger()
-private logger: ILogger;
+## 运行 Demo
+```bash
+npm run watch   # 根目录构建 SDK
+cd demo-webpack && npm start
 ```
-
-### Hooks
-
-```typescript
-// Get service
-const userService = useService<IUserService>(TYPES.UserService);
-
-// Get container
-const container = useContainer();
-
-// Get logger
-const logger = useLogger();
-
-// Store hooks
-const [state, setState] = useStore<T>(TYPES.UserStore);
-const currentState = useStoreState<T>(TYPES.UserStore);
-const setStoreState = useStoreSetter<T>(TYPES.UserStore);
-```
-
-### Store Facade
-
-```typescript
-// Create facade from Zustand store
-const facade = createStoreFacade(useUserStore);
-
-// Use facade
-facade.getState();
-facade.setState({ isLogin: true });
-facade.subscribe((state) => console.log(state));
-```
-
-## 🧪 Testing
-
-```typescript
-import { ServiceContainer, TYPES } from '@bookworm/service-store-sdk';
-
-// Create test container
-const testContainer = new ServiceContainer();
-
-// Mock services
-testContainer.bindConstant(TYPES.UserService, mockUserService);
-testContainer.bindConstant(TYPES.UserStore, mockStoreFacade);
-
-// Use in tests
-const userService = testContainer.get<IUserService>(TYPES.UserService);
-```
-
-## 🔄 Migration from Other Libraries
-
-### From bookworm's Custom DI
-
-```typescript
-// Before
-@Injectable({ identifier: IUserService })
-class UserService {
-  constructor(@InjectStore(IUserStore) private userStore: IStoreAccessor) {}
-}
-
-// After
-@Service(TYPES.UserService)
-class UserService extends BaseService {
-  constructor(@InjectStore(TYPES.UserStore) private userStore: IStoreFacade) {
-    super();
-  }
-}
-```
-
-### From iCube's DI
-
-```typescript
-// Before
-@Injectable({ identifier: IChatService })
-class ChatService extends Disposable {
-  @Inject(ISessionService)
-  protected _sessionService!: ISessionService;
-}
-
-// After
-@Service(TYPES.ChatService)
-class ChatService extends BaseService {
-  constructor(
-    @Inject(TYPES.SessionService) private sessionService: ISessionService,
-    @InjectLogger() private logger?: ILogger
-  ) {
-    super(logger);
-  }
-}
-```
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE) for details.
-
-## 🙏 Acknowledgments
-
-- [Inversify](https://inversify.io/) - The amazing DI library this SDK is built on
-- [Zustand](https://zustand-demo.pmnd.rs/) - The lightweight state management library

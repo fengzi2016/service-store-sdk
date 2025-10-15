@@ -5,18 +5,43 @@ import { create } from 'zustand';
 /**
  * DI Store base class that combines service lifecycle with Zustand store functionality
  */
+type PersistOptions<T> = {
+  key: string;
+  partialize?: (state: T) => any;
+  storage?: Storage;
+};
+
+type StoreOptions<T> = {
+  persist?: PersistOptions<T>;
+};
+
 export abstract class DIStore<TState = any, TActions = any> extends BaseService {
   private store: any;
   private facade: IStoreFacade<TState & TActions>;
+  private persist?: PersistOptions<TState & TActions>;
 
-  constructor(initialState: TState) {
+  constructor(initialState: TState, options?: StoreOptions<TState & TActions>) {
     super();
+    this.persist = options?.persist as PersistOptions<TState & TActions> | undefined;
+
+    // Load persisted state (if enabled)
+    let bootState = initialState as TState & Partial<TActions>;
+    if (this.persist) {
+      const storage = this.persist.storage || window.localStorage;
+      try {
+        const raw = storage.getItem(this.persist.key);
+        if (raw) {
+          const persisted = JSON.parse(raw);
+          bootState = { ...(bootState as any), ...(persisted || {}) };
+        }
+      } catch {}
+    }
     
     // Create Zustand store with the initial state and actions
     this.store = create<TState & TActions>((set, get) => {
       const actions = this.createActions(set, get);
       return {
-        ...initialState,
+        ...bootState,
         ...actions,
       } as TState & TActions;
     });
@@ -87,6 +112,15 @@ export abstract class DIStore<TState = any, TActions = any> extends BaseService 
    */
   public setState(partial: Partial<TState & TActions>): void {
     this.store.setState(partial);
+    // Persist after each state update (if enabled)
+    if (this.persist) {
+      const storage = this.persist.storage || window.localStorage;
+      try {
+        const state: TState & TActions = this.store.getState();
+        const toSave = this.persist.partialize ? this.persist.partialize(state) : state;
+        storage.setItem(this.persist.key, JSON.stringify(toSave));
+      } catch {}
+    }
   }
 
   /**
@@ -94,6 +128,13 @@ export abstract class DIStore<TState = any, TActions = any> extends BaseService 
    */
   public subscribe(listener: (state: TState & TActions) => void): () => void {
     return this.store.subscribe(listener);
+  }
+
+  /**
+   * Compute a derived value from the current state without subscribing
+   */
+  public getComputed<U>(selector: (state: TState & TActions) => U): U {
+    return selector(this.store.getState());
   }
 
   /**

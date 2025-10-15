@@ -1,5 +1,10 @@
-export type Constructor<T = any>  = new (...args: any[]) => T;
-export type ServiceIdentifier<T = any> = Constructor<T> | string | symbol;
+import 'reflect-metadata';
+import { injectable } from 'inversify';
+import { ServiceIdentifier } from '../types';
+import { METADATA_KEYS } from '../types/constants';
+
+export type Constructor<T = any> = new (...args: any[]) => T;
+
 export interface ServiceMetadata {
     identifier: ServiceIdentifier;
     implementation: Constructor;
@@ -38,7 +43,17 @@ export class DependencyRegistry {
     const that = this;
     return function Injectable(options: InjectableOptions = {}) {
         return function<T extends Constructor> (target: T): T | void {
-           that.registerDependency(options.identifier ?? target, target, options.singleton ?? true);
+           // Register in our registry for auto-registration
+           const identifier = options.identifier ?? target;
+  
+           that.registerDependency(identifier, target, options.singleton ?? true);
+
+           // Persist identifier metadata for class→token mapping at resolve time
+           Reflect.defineMetadata(METADATA_KEYS.SERVICE, identifier, target);
+
+           // Apply Inversify's @injectable decorator
+           injectable()(target);
+
            return target;
         }
     }

@@ -11,7 +11,9 @@ export abstract class BaseService implements IService {
 
   constructor(logger?: ILogger) {
     this.serviceName = this.constructor.name;
-    this.logger = logger || new NoOpLogger();
+    const isValidLogger = logger && typeof (logger as any).info === 'function' && typeof (logger as any).debug === 'function' && typeof (logger as any).warn === 'function' && typeof (logger as any).error === 'function';
+    
+    this.logger = isValidLogger ? (logger as ILogger) : new NoOpLogger();
   }
 
   /**
