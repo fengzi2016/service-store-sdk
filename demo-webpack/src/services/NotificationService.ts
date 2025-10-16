@@ -4,8 +4,22 @@ import { UserService } from './UserService';
 import { ConfigService } from './ConfigService';
 import { CONFIG_SERVICE, NOTIFICATION_SERVICE, NOTIFICATION_STORE, USER_SERVICE } from '../tokens';
 
+export interface INotificationService {
+  sendNotification(message: string, type?: 'info' | 'warning' | 'error'): void;
+  sendWelcomeNotification(user: any): void;
+  sendLogoutNotification(user: any): void;
+  sendProfileUpdateNotification(user: any): void;
+  sendErrorNotification(error: string): void;
+  sendWarningNotification(warning: string): void;
+  getNotificationHistory(): string[];
+  getRecentNotifications(count?: number): string[];
+  clearHistory(): void;
+  getNotificationCount(): number;
+  getNotificationsByType(type: 'info' | 'warning' | 'error'): string[];
+}
+
 @Injectable({ identifier: NOTIFICATION_SERVICE })
-export class NotificationService extends BaseService {
+export class NotificationService extends BaseService implements INotificationService {
   constructor(
     @Inject(NOTIFICATION_STORE) private notificationStore: NotificationStore,
     @Inject(USER_SERVICE) private userService: UserService,

@@ -3,8 +3,19 @@ import { ConfigStore } from '../stores/ConfigStore';
 import { UserService } from './UserService';
 import { CONFIG_SERVICE, CONFIG_STORE, USER_SERVICE } from '../tokens';
 
+export interface IConfigService {
+  getConfig(): { theme: string; language: string; apiUrl: string };
+  updateConfig(newConfig: Partial<{ theme: string; language: string; apiUrl: string }>): Promise<boolean>;
+  getTheme(): string;
+  getLanguage(): string;
+  getApiUrl(): string;
+  isDarkMode(): boolean;
+  resetToDefaults(): Promise<void>;
+}
+
+
 @Injectable({ identifier: CONFIG_SERVICE })
-export class ConfigService extends BaseService {
+export class ConfigService extends BaseService implements IConfigService {
   constructor(
     @Inject(CONFIG_STORE) private configStore: ConfigStore,
     @Inject(USER_SERVICE) private userService: UserService,

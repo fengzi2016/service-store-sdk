@@ -1,14 +1,25 @@
-import { Injectable, Inject, InjectLogger, BaseService } from '@bookworm/service-store-sdk';
+import { Injectable, Inject, InjectLogger, BaseService, Logger } from '@bookworm/service-store-sdk';
 import { UserStore } from '../stores/UserStore';
 import { NotificationService } from './NotificationService';
 import { USER_SERVICE, USER_STORE, NOTIFICATION_SERVICE } from '../tokens';
 
+export interface IUserService {
+  login(email: string, password: string): Promise<{ success: boolean; user?: any; error?: string }>;
+  logout(): Promise<void>;
+  getCurrentUser(): any | null;
+  isLoggedIn(): boolean;
+  hasRole(role: string): boolean;
+  updateProfile(updates: { name?: string; email?: string }): Promise<boolean>;
+}
+
+
+
 @Injectable({ identifier: USER_SERVICE })
-export class UserService extends BaseService {
+export class UserService extends BaseService implements IUserService {
   constructor(
     @Inject(USER_STORE) private userStore: UserStore,
     @Inject(NOTIFICATION_SERVICE) private notificationService: NotificationService,
-    @InjectLogger() logger?: any
+    @InjectLogger() logger?: Logger
   ) {
     super(logger);
   }
