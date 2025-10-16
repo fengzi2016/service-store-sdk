@@ -1,13 +1,31 @@
 import { IStoreFacade } from '../types';
 
+// Generic store abstraction
+export interface IStateStore<T = unknown> {
+  getState(): T;
+  setState(partial: Partial<T>): void;
+  subscribe(listener: (state: T) => void): () => void;
+  destroy?: () => void;
+}
+
+export interface IStoreFactory<TState, TActions> {
+  create(
+    initialState: TState,
+    actionsFactory: (
+      set: (partial: Partial<TState & TActions> | ((s: TState & TActions) => Partial<TState & TActions>)) => void,
+      get: () => TState & TActions
+    ) => Partial<TActions>
+  ): IStateStore<TState & TActions>;
+}
+
 /**
  * Store facade implementation that wraps Zustand stores
  */
-export class StoreFacade<T = any> implements IStoreFacade<T> {
-  private store: any;
+export class StoreFacade<T = unknown> implements IStoreFacade<T> {
+  private store: IStateStore<T>;
   private listeners: Set<(state: T) => void> = new Set();
 
-  constructor(store: any) {
+  constructor(store: IStateStore<T>) {
     this.store = store;
   }
 
@@ -33,11 +51,9 @@ export class StoreFacade<T = any> implements IStoreFacade<T> {
     
     // Subscribe to the store if it has a subscribe method
     let unsubscribe: (() => void) | undefined;
-    if (typeof this.store.subscribe === 'function') {
-      unsubscribe = this.store.subscribe((state: T) => {
-        this.listeners.forEach(listener => listener(state));
-      });
-    }
+    unsubscribe = this.store.subscribe((state: T) => {
+      this.listeners.forEach(listener => listener(state));
+    });
 
     // Return unsubscribe function
     return () => {
@@ -61,15 +77,15 @@ export class StoreFacade<T = any> implements IStoreFacade<T> {
   /**
    * Get the underlying store (for advanced usage)
    */
-  getStore(): any {
+  getStore(): IStateStore<T> {
     return this.store;
   }
 }
 
 /**
- * Create a store facade from a Zustand store
+ * Create a store facade from any store that implements IStateStore
  */
-export function createStoreFacade<T>(store: any): IStoreFacade<T> {
+export function createStoreFacade<T>(store: IStateStore<T>): IStoreFacade<T> {
   return new StoreFacade<T>(store);
 }
 
@@ -77,14 +93,14 @@ export function createStoreFacade<T>(store: any): IStoreFacade<T> {
  * Create a store facade with custom methods
  */
 export function createAdvancedStoreFacade<T>(
-  store: any,
-  customMethods?: Record<string, (...args: any[]) => any>
-): IStoreFacade<T> & Record<string, any> {
+  store: IStateStore<T>,
+  customMethods?: Record<string, (...args: unknown[]) => unknown>
+): IStoreFacade<T> & Record<string, unknown> {
   const facade = new StoreFacade<T>(store);
   
   if (customMethods) {
     Object.assign(facade, customMethods);
   }
   
-  return facade as IStoreFacade<T> & Record<string, any>;
+  return facade as unknown as IStoreFacade<T> & Record<string, unknown>;
 }

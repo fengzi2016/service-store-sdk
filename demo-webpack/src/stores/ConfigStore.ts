@@ -1,4 +1,4 @@
-import { Injectable, DIStore } from '@bookworm/service-store-sdk';
+import { Injectable, StoreBase } from '@bookworm/service-store-sdk';
 import { CONFIG_STORE } from '../tokens';
 
 type ConfigStoreState = {
@@ -12,7 +12,7 @@ type ConfigStoreActions = {
 };
 
 @Injectable({ identifier: CONFIG_STORE })
-export class ConfigStore extends DIStore<ConfigStoreState, ConfigStoreActions> {
+export class ConfigStore extends StoreBase<ConfigStoreState, ConfigStoreActions> {
   constructor() {
     super(
       { theme: 'light', language: 'en', apiUrl: 'https://api.example.com' },

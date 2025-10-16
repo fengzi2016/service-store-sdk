@@ -28,26 +28,23 @@ export {
   useLogger,
 } from './react/context';
 
-export {
-  useStore,
-  useStoreState,
-  useStoreSetter,
-  useServiceInstance,
-  useIsServiceBound,
-  useBoundServices,
-  useDIStore,
-} from './react/hooks';
 
 // Store utilities
 export {
   StoreFacade,
   createStoreFacade,
   createAdvancedStoreFacade,
+  IStateStore,
+  IStoreFactory,
 } from './stores/store-facade';
 
 export {
-  DIStore,
+  StoreBase,
+  setGlobalStoreFactory,
+  getGlobalStoreFactory,
 } from './stores/di-store';
+
+
 
 // Logger
 export {

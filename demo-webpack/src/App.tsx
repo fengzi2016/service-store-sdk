@@ -3,9 +3,8 @@ import {
   ServiceProvider,
   useService,
   Injectable,
-  DIStore,
-  useDIStore,
-  useContainer,
+  StoreBase,
+  setGlobalStoreFactory
 } from '@bookworm/service-store-sdk';
 
 // Import services and stores
@@ -21,12 +20,14 @@ import {
   APP_STORE,
 } from './tokens';
 
+import { jotaiAdapter } from './adapters/jotai-adapter';
+
 // Additional stores for demo
 type ThemeStoreState = { theme: 'light' | 'dark'; primaryColor: string; fontSize: number };
 type ThemeStoreActions = { setTheme: (theme: 'light' | 'dark') => void; setPrimaryColor: (color: string) => void; setFontSize: (size: number) => void; resetTheme: () => void };
 
 @Injectable({ identifier: THEME_STORE })
-export class ThemeStore extends DIStore<ThemeStoreState, ThemeStoreActions> {
+export class ThemeStore extends StoreBase<ThemeStoreState, ThemeStoreActions> {
   constructor() { super({ theme: 'light', primaryColor: '#007bff', fontSize: 14 }); }
   protected createActions(
     set: (partial: Partial<ThemeStoreState & ThemeStoreActions> | ((state: ThemeStoreState & ThemeStoreActions) => Partial<ThemeStoreState & ThemeStoreActions>)) => void,
@@ -45,7 +46,7 @@ type AppStoreState = { isInitialized: boolean; currentPage: string; notification
 type AppStoreActions = { setInitialized: (initialized: boolean) => void; setCurrentPage: (page: string) => void; addNotification: (notification: string) => void; clearNotifications: () => void };
 
 @Injectable({ identifier: APP_STORE })
-export class AppStore extends DIStore<AppStoreState, AppStoreActions> {
+export class AppStore extends StoreBase<AppStoreState, AppStoreActions> {
   constructor() { super({ isInitialized: false, currentPage: 'home', notifications: [] }); }
   protected createActions(
     set: (partial: Partial<AppStoreState & AppStoreActions> | ((state: AppStoreState & AppStoreActions) => Partial<AppStoreState & AppStoreActions>)) => void,
@@ -95,12 +96,7 @@ function ServiceDemo() {
       notificationService.sendErrorNotification('Profile update failed');
     }
   };
-  const container = useContainer();
 
-
-  React.useEffect(() => {
-    console.log('isBound USER_SERVICE', container.isBound(UserService));
-  }, [container]);
   return (
     <div style={{ padding: '20px', border: '1px solid #ccc', margin: '10px' }}>
       <h3>Enhanced Services Demo</h3>
@@ -165,6 +161,9 @@ function CompleteDemo() {
 }
 
 function App() {
+  React.useEffect(() => {
+    setGlobalStoreFactory(jotaiAdapter);
+  }, []);
   return (
     <ServiceProvider> 
       <CompleteDemo />

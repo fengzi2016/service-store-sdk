@@ -1,4 +1,4 @@
-import { Injectable, DIStore } from '@bookworm/service-store-sdk';
+import { Injectable, StoreBase } from '@bookworm/service-store-sdk';
 import { USER_STORE } from '../tokens';
 
 type UserStoreState = {
@@ -13,7 +13,7 @@ type UserStoreActions = {
 };
 
 @Injectable({ identifier: USER_STORE })
-export class UserStore extends DIStore<UserStoreState, UserStoreActions> {
+export class UserStore extends StoreBase<UserStoreState, UserStoreActions> {
   constructor() { 
     super(
       { user: null, loading: false },

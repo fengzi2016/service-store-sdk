@@ -1,4 +1,4 @@
-import { Injectable, DIStore } from '@bookworm/service-store-sdk';
+import { Injectable, StoreBase } from '@bookworm/service-store-sdk';
 import { NOTIFICATION_STORE } from '../tokens';
 
 type NotificationStoreState = {
@@ -11,7 +11,7 @@ type NotificationStoreActions = {
 };
 
 @Injectable({ identifier: NOTIFICATION_STORE })
-export class NotificationStore extends DIStore<NotificationStoreState, NotificationStoreActions> {
+export class NotificationStore extends StoreBase<NotificationStoreState, NotificationStoreActions> {
   constructor() {
     super(
       { history: [] },

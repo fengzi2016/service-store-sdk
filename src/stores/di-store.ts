@@ -1,5 +1,7 @@
 import { BaseService } from '../core/base-service';
+import { useSyncExternalStore } from 'react';
 import { IStoreFacade } from '../types';
+import { IStateStore, IStoreFactory } from './store-facade';
 import { create } from 'zustand';
 
 /**
@@ -7,20 +9,38 @@ import { create } from 'zustand';
  */
 type PersistOptions<T> = {
   key: string;
-  partialize?: (state: T) => any;
+  partialize?: (state: T) => Partial<T>;
   storage?: Storage;
 };
 
-type StoreOptions<T> = {
-  persist?: PersistOptions<T>;
+type StoreOptions<TState, TActions> = {
+  persist?: PersistOptions<TState & TActions>;
+  storeFactory?: IStoreFactory<TState, TActions>;
 };
 
-export abstract class DIStore<TState = any, TActions = any> extends BaseService {
-  private store: any;
+// Global store factory configuration
+let globalStoreFactory: IStoreFactory<unknown, unknown> | null = null;
+
+/**
+ * Set the global store factory for all DIStore instances
+ */
+export function setGlobalStoreFactory<TState, TActions>(factory: IStoreFactory<TState, TActions>): void {
+  globalStoreFactory = factory as IStoreFactory<unknown, unknown>;
+}
+
+/**
+ * Get the current global store factory
+ */
+export function getGlobalStoreFactory(): IStoreFactory<unknown, unknown> | null {
+  return globalStoreFactory;
+}
+
+export abstract class StoreBase<TState = unknown, TActions = unknown> extends BaseService {
+  private store: IStateStore<TState & TActions>;
   private facade: IStoreFacade<TState & TActions>;
   private persist?: PersistOptions<TState & TActions>;
 
-  constructor(initialState: TState, options?: StoreOptions<TState & TActions>) {
+  constructor(initialState: TState, options?: StoreOptions<TState, TActions>) {
     super();
     this.persist = options?.persist as PersistOptions<TState & TActions> | undefined;
 
@@ -31,20 +51,36 @@ export abstract class DIStore<TState = any, TActions = any> extends BaseService 
       try {
         const raw = storage.getItem(this.persist.key);
         if (raw) {
-          const persisted = JSON.parse(raw);
-          bootState = { ...(bootState as any), ...(persisted || {}) };
+          const persisted = JSON.parse(raw) as Partial<TState>;
+          bootState = { ...bootState, ...persisted };
         }
       } catch {}
     }
     
     // Create Zustand store with the initial state and actions
-    this.store = create<TState & TActions>((set, get) => {
-      const actions = this.createActions(set, get);
-      return {
-        ...bootState,
-        ...actions,
-      } as TState & TActions;
-    });
+    // Use adapter factory if provided; otherwise fallback to Zustand
+    const factory = options?.storeFactory || globalStoreFactory;
+    
+    if (factory) {
+      this.store = (factory as IStoreFactory<TState, TActions>).create(
+        bootState as TState,
+        (set, get) => this.createActions(set, get)
+      );
+    } else {
+      const zustandStore = create<TState & TActions>((set, get) => {
+        const actions = this.createActions(set, get);
+        return {
+          ...bootState,
+          ...actions,
+        } as TState & TActions;
+      });
+      // Adapt Zustand store to IStateStore
+      this.store = {
+        getState: () => zustandStore.getState(),
+        setState: (partial) => zustandStore.setState(partial),
+        subscribe: (listener) => zustandStore.subscribe(listener),
+      };
+    }
 
     // Create facade for the store
     this.facade = this.createFacade();
@@ -87,9 +123,9 @@ export abstract class DIStore<TState = any, TActions = any> extends BaseService 
   }
 
   /**
-   * Get the underlying Zustand store
+   * Get the underlying store (for advanced usage)
    */
-  public getStore(): any {
+  public getStore(): IStateStore<TState & TActions> {
     return this.store;
   }
 
@@ -97,7 +133,11 @@ export abstract class DIStore<TState = any, TActions = any> extends BaseService 
    * Use store hook - returns a selector function
    */
   public useStore<U>(selector: (state: TState & TActions) => U): U {
-    return this.store(selector);
+    const subscribe = (onStoreChange: () => void) => this.store.subscribe(() => onStoreChange());
+    // getSnapshot must return a cached/raw snapshot to avoid infinite loops
+    const getSnapshot = () => this.store.getState();
+    const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+    return selector(state);
   }
 
   /**
@@ -147,3 +187,5 @@ export abstract class DIStore<TState = any, TActions = any> extends BaseService 
     super.dispose();
   }
 }
+
+
